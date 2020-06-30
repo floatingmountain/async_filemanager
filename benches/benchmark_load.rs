@@ -6,7 +6,7 @@ use futures::stream::StreamExt;
 use std::sync::Arc;
 use threadpool::Builder;
 
-async fn load_custom(f: &[&str], pool: Arc<threadpool::ThreadPool>)  {
+async fn load_custom(f: &[&str], pool: Arc<threadpool::ThreadPool>) {
     let mut u = FuturesUnordered::new();
     for file in f.iter() {
         let pool = pool.clone();
@@ -20,7 +20,7 @@ async fn load_custom(f: &[&str], pool: Arc<threadpool::ThreadPool>)  {
         vec.push(val);
     }
 }
-async fn load_async(f: &[&str]){
+async fn load_async(f: &[&str]) {
     let mut u = FuturesUnordered::new();
     for file in f.iter() {
         let mut path = String::from("benches/benchfiles/");
@@ -127,15 +127,12 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     c.bench_function("sync", |b| {
         b.iter(|| {
-                load_sync(black_box(&[
-                    "l01", "l02", "l03", "l04", "l05", "l06", "l07", "l08", "s01", "s02", "s03",
-                    "s04", "s05", "s06", "s07", "s08", "s09", "s10", "s11", "s12", "s13", "s14",
-                    "s15", "s16",
-                ]))
-            
+            load_sync(black_box(&[
+                "l01", "l02", "l03", "l04", "l05", "l06", "l07", "l08", "s01", "s02", "s03", "s04",
+                "s05", "s06", "s07", "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16",
+            ]))
         })
     });
-
 }
 
 criterion_group!(benches, criterion_benchmark);
