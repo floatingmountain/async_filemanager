@@ -1,4 +1,4 @@
-use connectrs::AsyncFileLoader;
+use async_filemanager::AsyncFileLoader;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use futures::stream::futures_unordered::FuturesUnordered;

@@ -1,5 +1,5 @@
 [package]
-name = "connectrs"
+name = "async_filemanager"
 version = "0.1.0"
 authors = ["floatingmountain <shattered.web.master@gmail.com>"]
 edition = "2018"

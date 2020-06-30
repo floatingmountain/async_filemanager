@@ -27,13 +27,19 @@ impl<C> FileManager<C>
 where
 C: Codec
 {
-    pub fn load<P: AsRef<Path>>(&mut self, path: P){
+    pub fn new(pool: Arc<ThreadPool>) -> Self { Self { pool, loading:futures::stream::FuturesUnordered::new() , cache: HashMap::new()} }
+    pub async fn load<P: AsRef<Path>>(&mut self, path: P){
         let path = path.as_ref().to_owned();
         if !self.cache.contains_key(&path){
-            self.loading.push(AsyncFileLoader::new(path, self.pool.clone()))
+            self.loading.push(AsyncFileLoader::new(path, self.pool.clone()));
         }
+        self.update().await;
     }
     pub async fn get<P: AsRef<Path>>(&mut self, path: P)->Option<&C>{
+        self.update().await;
+        self.cache.get(path.as_ref())
+    }
+    async fn update(&mut self){
         while let Poll::Ready(Some((p,r))) = futures::poll!(self.loading.next()){
             match r{
                 Ok(b) => {
@@ -42,7 +48,6 @@ C: Codec
                 Err(e) => (),
             }
         }
-        self.cache.get(path.as_ref())
     }
 }
 
@@ -52,12 +57,6 @@ where
 {
     fn encode(&self) -> Vec<u8>;
     fn decode(bytes: &Vec<u8>) -> Self;
-}
-
-impl<C> FileManager<C>
-where C: Codec
-{
-    fn new() -> Self { Self { pool: Arc::new(ThreadPool::new(4)), loading:futures::stream::FuturesUnordered::new() , cache: HashMap::new()} }
 }
 
 pub struct AsyncFileLoader {
@@ -109,9 +108,19 @@ impl Future for AsyncFileLoader {
 
 #[cfg(test)]
 mod tests {
-    use super::AsyncFileLoader;
+    use super::{AsyncFileLoader, FileManager, Codec};
     use std::{path::PathBuf, sync::Arc};
     use threadpool::Builder;
+
+    impl Codec for String{
+        fn encode(&self) -> Vec<u8> {
+        todo!()
+    }
+        fn decode(bytes: &Vec<u8>) -> Self {
+        String::from_utf8(bytes.clone()).unwrap()
+    }
+        
+    }
     #[test]
     fn it_works() {
         let pool = Arc::new(Builder::new().build());
@@ -122,5 +131,20 @@ mod tests {
             assert_eq!(r.unwrap(),vec![13, 10, 116, 101, 115, 116, 13, 10, 13, 10, 116, 101, 115, 116, 13, 10, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 13, 10, 13, 10, 116, 101, 115, 116, 13, 10, 13, 10, 116, 101, 115, 116, 13, 10, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 13, 10, 116, 101, 115, 116, 13, 10, 13, 10, 116, 101, 115, 116, 13, 10, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116, 116, 101, 115, 116]);
             assert_eq!(p, path);
         })
+    }
+    #[test]
+    fn it_works_2(){
+        let pool = Arc::new(Builder::new().build());
+        let path = PathBuf::new().join("benches/benchfiles/s01");
+        
+        let mut manager = FileManager::<String>::new(pool);
+        futures::executor::block_on(
+            manager.load(&path)
+        );
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let t = futures::executor::block_on(
+            manager.get(&path)
+        );
+        assert_eq!(t, Some(&String::from("\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest")));
     }
 }
