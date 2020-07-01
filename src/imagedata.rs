@@ -1,4 +1,3 @@
-
 use super::gpuloader::{Device, Queue, Texture};
 use std::{path::PathBuf, sync::Arc};
 
@@ -13,7 +12,7 @@ pub struct ImageData {
 }
 impl ImageData {
     pub fn upload(&self, _device: Arc<Device>, _queue: Arc<Queue>) -> Texture {
-        Texture{}
+        Texture {}
     }
 }
 
@@ -37,7 +36,7 @@ fn get_format_from_extension(p: &PathBuf) -> Option<ImageFormat> {
 #[cfg(test)]
 mod tests {
     use super::ImageData;
-    use crate::{LoadStatus, AsyncFileManager};
+    use crate::{AsyncFileManager, LoadStatus};
     use std::{path::PathBuf, sync::Arc};
 
     #[test]

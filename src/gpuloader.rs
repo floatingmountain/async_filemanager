@@ -82,8 +82,8 @@ impl Future for AsyncGpuLoader {
 
 #[cfg(test)]
 mod tests {
-    use super::{AsyncGpuLoader, ImageData, Device, Queue};
-    use crate::{LoadStatus, AsyncFileManager};
+    use super::{AsyncGpuLoader, Device, ImageData, Queue};
+    use crate::{AsyncFileManager, LoadStatus};
     use std::{path::PathBuf, sync::Arc};
 
     #[test]
@@ -96,11 +96,10 @@ mod tests {
             while mngr.status(&path).await.eq(&LoadStatus::Loading) {}
             let img = mngr.get(&path).await.expect("Image not loaded!").clone();
 
-            let device = Arc::new(Device{});
-            let queue = Arc::new(Queue{});
+            let device = Arc::new(Device {});
+            let queue = Arc::new(Queue {});
             let gpufut = AsyncGpuLoader::new(path, img, device, queue, pool);
             let (_path, _texture) = gpufut.await;
-
         });
     }
 }

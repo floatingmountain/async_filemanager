@@ -1,4 +1,8 @@
-use crate::{gpuloader::{Texture, AsyncGpuLoader, Device, Queue}, imagedata::ImageData, LoadStatus};
+use crate::{
+    gpuloader::{AsyncGpuLoader, Device, Queue, Texture},
+    imagedata::ImageData,
+    LoadStatus,
+};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use std::{
@@ -9,10 +13,8 @@ use std::{
 };
 use threadpool::ThreadPool;
 
-
 #[allow(unused)]
-pub struct AsyncGpuManager
-{
+pub struct AsyncGpuManager {
     device: Arc<Device>,
     queue: Arc<Queue>,
     pool: Arc<ThreadPool>,
@@ -21,8 +23,7 @@ pub struct AsyncGpuManager
     cache: HashMap<PathBuf, Arc<Texture>>,
 }
 
-impl AsyncGpuManager
-{
+impl AsyncGpuManager {
     #[allow(unused)]
     pub fn new(pool: Arc<ThreadPool>, device: Arc<Device>, queue: Arc<Queue>) -> Self {
         Self {
@@ -74,19 +75,21 @@ impl AsyncGpuManager
     async fn update(&mut self) {
         while let Poll::Ready(Some((p, t))) = futures::poll!(self.loading.next()) {
             self.paths_loading.remove(&p);
-                    self.cache
-                        .entry(p.clone())
-                        .or_insert(Arc::new(t));
+            self.cache.entry(p.clone()).or_insert(Arc::new(t));
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    
-    use std::{path::PathBuf, sync::Arc};
+
     use super::AsyncGpuManager;
-    use crate::{AsyncFileManager, gpuloader::{Queue, Device}, imagedata::ImageData, LoadStatus};
+    use crate::{
+        gpuloader::{Device, Queue},
+        imagedata::ImageData,
+        AsyncFileManager, LoadStatus,
+    };
+    use std::{path::PathBuf, sync::Arc};
     #[derive(Debug, Eq, PartialEq)]
     struct LoadedFile {
         string: String,
@@ -104,8 +107,8 @@ mod tests {
         let pool = Arc::new(threadpool::Builder::new().build());
         let mut imgmngr = AsyncFileManager::<ImageData>::new(pool.clone());
 
-        let device = Arc::new(Device{});
-        let queue = Arc::new(Queue{});
+        let device = Arc::new(Device {});
+        let queue = Arc::new(Queue {});
         let mut gpumngr = AsyncGpuManager::new(pool, device, queue);
 
         futures::executor::block_on(async {
@@ -115,8 +118,11 @@ mod tests {
             let img = imgmngr.get(&path).await.expect("Image not loaded!").clone();
             gpumngr.load(&path, img).await;
             while gpumngr.status(&path).await.eq(&LoadStatus::Loading) {}
-            let _txt = gpumngr.get(&path).await.expect("Texture not loaded!").clone();
-            
+            let _txt = gpumngr
+                .get(&path)
+                .await
+                .expect("Texture not loaded!")
+                .clone();
         });
     }
 }

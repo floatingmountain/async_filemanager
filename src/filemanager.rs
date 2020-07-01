@@ -1,8 +1,9 @@
-use crate::{LoadStatus, AsyncFileLoader};
+use crate::{AsyncFileLoader, LoadStatus};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use std::{
     collections::{HashMap, HashSet},
+    convert::TryFrom,
     path::{Path, PathBuf},
     sync::Arc,
     task::Poll,
@@ -12,7 +13,7 @@ use threadpool::ThreadPool;
 #[allow(unused)]
 pub struct AsyncFileManager<F>
 where
-    F: From<(PathBuf, Vec<u8>)>,
+    F: TryFrom<(PathBuf, Vec<u8>)>,
 {
     pool: Arc<ThreadPool>,
     loading: FuturesUnordered<AsyncFileLoader>,
@@ -22,7 +23,7 @@ where
 
 impl<F> AsyncFileManager<F>
 where
-    F: From<(PathBuf, Vec<u8>)>,
+    F: TryFrom<(PathBuf, Vec<u8>)>,
 {
     #[allow(unused)]
     pub fn new(pool: Arc<ThreadPool>) -> Self {
@@ -72,9 +73,13 @@ where
             self.paths_loading.remove(&p);
             match r {
                 Ok(b) => {
-                    self.cache
-                        .entry(p.clone())
-                        .or_insert(Arc::new(F::from((p, b))));
+                    match F::try_from((p.clone(), b)) {
+                        Ok(f) => {
+                            self.cache.entry(p.clone()).or_insert(Arc::new(f));
+                        }
+                        Err(_e) => {  // TODO: log this
+                        }
+                    }
                 }
                 Err(_e) => { // TODO: log this
                 }
@@ -86,18 +91,19 @@ where
 #[cfg(test)]
 mod tests {
     use super::AsyncFileManager;
-    use std::{path::PathBuf, sync::Arc};
+    use std::{path::PathBuf, sync::Arc, convert::TryFrom};
     #[derive(Debug, Eq, PartialEq)]
     struct LoadedFile {
         string: String,
     }
 
-    impl From<(PathBuf, Vec<u8>)> for LoadedFile {
-        fn from((_p, v): (PathBuf, Vec<u8>)) -> Self {
-            LoadedFile {
-                string: String::from_utf8(v).unwrap(),
-            }
-        }
+    impl TryFrom<(PathBuf, Vec<u8>)> for LoadedFile {
+        type Error = std::string::FromUtf8Error;
+        fn try_from((path, bytes): (PathBuf, Vec<u8>)) -> Result<Self, Self::Error> {
+            Ok(LoadedFile {
+                string: String::from_utf8(bytes)?,
+            })
+    }
     }
     #[test]
     fn it_works_2() {
@@ -108,6 +114,6 @@ mod tests {
         futures::executor::block_on(manager.load(&path));
         std::thread::sleep(std::time::Duration::from_millis(500));
         let t = futures::executor::block_on(manager.get(&path));
-        assert_eq!(t, Some(&Arc::new(LoadedFile::from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())))));
+        assert_eq!(t, Some(&Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap())));
     }
 }

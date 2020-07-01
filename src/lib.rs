@@ -15,16 +15,16 @@ pub enum LoadStatus {
     Loaded,
 }
 #[derive(Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub enum Identifier{
+pub enum Identifier {
     Path(PathBuf),
     Index(usize),
 }
-impl From<PathBuf> for Identifier{
+impl From<PathBuf> for Identifier {
     fn from(p: PathBuf) -> Self {
         Identifier::Path(p)
     }
 }
-impl From<usize> for Identifier{
+impl From<usize> for Identifier {
     fn from(u: usize) -> Self {
         Identifier::Index(u)
     }
