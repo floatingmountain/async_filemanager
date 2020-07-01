@@ -18,6 +18,7 @@ where
     pool: Arc<ThreadPool>,
     loading: FuturesUnordered<AsyncFileLoader>,
     paths_loading: HashSet<PathBuf>,
+    load_errors: HashMap<PathBuf, std::io::Error>,
     cache: HashMap<PathBuf, Arc<F>>,
 }
 
@@ -31,6 +32,7 @@ where
             pool,
             loading: futures::stream::FuturesUnordered::new(),
             paths_loading: HashSet::new(),
+            load_errors: HashMap::new(),
             cache: HashMap::new(),
         }
     }
@@ -60,6 +62,8 @@ where
         self.update().await;
         if self.paths_loading.contains(path.as_ref()) {
             LoadStatus::Loading
+        } else if let Some(error) = self.load_errors.remove(path.as_ref()){
+            LoadStatus::Error(error)
         } else {
             if let Some(_) = self.cache.get(path.as_ref()) {
                 LoadStatus::Loaded
@@ -78,10 +82,12 @@ where
                             self.cache.entry(p.clone()).or_insert(Arc::new(f));
                         }
                         Err(_e) => {  // TODO: log this
+                            self.load_errors.entry(p).or_insert(std::io::Error::new(std::io::ErrorKind::InvalidData, "Could not convert raw Data!"));
                         }
                     }
                 }
-                Err(_e) => { // TODO: log this
+                Err(e) => {
+                    self.load_errors.entry(p).or_insert(e);
                 }
             }
         }
@@ -99,7 +105,7 @@ mod tests {
 
     impl TryFrom<(PathBuf, Vec<u8>)> for LoadedFile {
         type Error = std::string::FromUtf8Error;
-        fn try_from((path, bytes): (PathBuf, Vec<u8>)) -> Result<Self, Self::Error> {
+        fn try_from((_path, bytes): (PathBuf, Vec<u8>)) -> Result<Self, Self::Error> {
             Ok(LoadedFile {
                 string: String::from_utf8(bytes)?,
             })
