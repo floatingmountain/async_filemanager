@@ -11,7 +11,7 @@ use std::{
     sync::Arc,
     task::Poll,
 };
-use threadpool::ThreadPool;
+use futures::executor::ThreadPool;
 
 #[allow(unused)]
 pub struct AsyncGpuManager {
@@ -90,6 +90,8 @@ mod tests {
         AsyncFileManager, LoadStatus,
     };
     use std::{path::PathBuf, sync::Arc};
+    use futures::executor::ThreadPoolBuilder;
+
     #[derive(Debug, Eq, PartialEq)]
     struct LoadedFile {
         string: String,
@@ -104,7 +106,7 @@ mod tests {
     }
     #[test]
     fn manage_gpu_upload() {
-        let pool = Arc::new(threadpool::Builder::new().build());
+        let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
         let mut imgmngr = AsyncFileManager::<ImageData>::new(pool.clone());
 
         let device = Arc::new(Device {});

@@ -38,10 +38,11 @@ mod tests {
     use super::ImageData;
     use crate::{AsyncFileManager, LoadStatus};
     use std::{path::PathBuf, sync::Arc};
+    use futures::executor::ThreadPoolBuilder;
 
     #[test]
     fn load_single_image() {
-        let pool = Arc::new(threadpool::ThreadPool::new(4));
+        let pool = Arc::new(ThreadPoolBuilder::new().pool_size(4).create().unwrap());
         let mut mngr = AsyncFileManager::<ImageData>::new(pool);
         futures::executor::block_on(async {
             let path = PathBuf::new().join("small_scream.png");
