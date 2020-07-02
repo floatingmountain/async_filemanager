@@ -1,11 +1,11 @@
 use futures::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    mpsc::{sync_channel, Receiver},
     Arc,
 };
+use crossbeam_channel::{bounded, Receiver};
 use std::{io::ErrorKind, task::Poll};
-use threadpool::ThreadPool;
+use futures::executor::ThreadPool;
 
 pub struct AsyncFileLoader {
     path: PathBuf,
@@ -37,9 +37,9 @@ impl Future for AsyncFileLoader {
         let path = self.path.clone();
         match &self.status {
             LoadStatus::Path => {
-                let (tx, rx) = sync_channel(1);
+                let (tx, rx) = bounded(1);
                 let w = cx.waker().clone();
-                self.pool.execute(move || {
+                self.pool.spawn_ok(async move {
                     tx.send((path.clone(), std::fs::read(path)))
                         .expect("Error forwarding loaded data!");
                     w.wake();
@@ -59,11 +59,11 @@ impl Future for AsyncFileLoader {
 mod tests {
     use super::AsyncFileLoader;
     use std::{path::PathBuf, sync::Arc};
-    use threadpool::Builder;
+    use futures::executor::ThreadPoolBuilder;
 
     #[test]
     fn it_works() {
-        let pool = Arc::new(Builder::new().build());
+        let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
         let path = PathBuf::new().join("benches/benchfiles/s01");
         let l = AsyncFileLoader::new(&path, pool);
         async_std::task::block_on(async {

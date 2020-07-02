@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
     task::Poll,
 };
-use threadpool::ThreadPool;
+use futures::executor::ThreadPool;
 
 #[allow(unused)]
 pub struct AsyncFileManager<F>
@@ -98,6 +98,8 @@ where
 mod tests {
     use super::AsyncFileManager;
     use std::{path::PathBuf, sync::Arc, convert::TryFrom};
+    use futures::executor::ThreadPoolBuilder;
+
     #[derive(Debug, Eq, PartialEq)]
     struct LoadedFile {
         string: String,
@@ -113,7 +115,7 @@ mod tests {
     }
     #[test]
     fn it_works_2() {
-        let pool = Arc::new(threadpool::Builder::new().build());
+        let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
         let path = PathBuf::new().join("benches/benchfiles/s01");
 
         let mut manager = AsyncFileManager::<LoadedFile>::new(pool);

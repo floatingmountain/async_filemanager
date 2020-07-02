@@ -4,9 +4,9 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt;
 use std::sync::Arc;
-use threadpool::Builder;
+use futures::executor::{ ThreadPool, ThreadPoolBuilder};
 
-async fn load_custom(f: &[&str], pool: Arc<threadpool::ThreadPool>) {
+async fn load_custom(f: &[&str], pool: Arc<ThreadPool>) {
     let mut u = FuturesUnordered::new();
     for file in f.iter() {
         let pool = pool.clone();
@@ -46,7 +46,7 @@ fn load_sync(f: &[&str]) -> Vec<Vec<u8>> {
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("cpu 1", |b| {
-        let pool = Arc::new(Builder::new().num_threads(1).build());
+        let pool = Arc::new(ThreadPoolBuilder::new().pool_size(1).create().unwrap());
         b.iter(|| {
             let pool = pool.clone();
             async_std::task::block_on(async {
@@ -63,7 +63,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function("cpu 4", |b| {
-        let pool = Arc::new(Builder::new().num_threads(4).build());
+        let pool = Arc::new(ThreadPoolBuilder::new().pool_size(4).create().unwrap());
         b.iter(|| {
             let pool = pool.clone();
             async_std::task::block_on(async {
@@ -80,7 +80,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function("cpu 8", |b| {
-        let pool = Arc::new(Builder::new().num_threads(8).build());
+        let pool = Arc::new(ThreadPoolBuilder::new().pool_size(8).create().unwrap());
         b.iter(|| {
             let pool = pool.clone();
             async_std::task::block_on(async {
@@ -97,7 +97,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function("cpu 16", |b| {
-        let pool = Arc::new(Builder::new().num_threads(16).build());
+        let pool = Arc::new(ThreadPoolBuilder::new().pool_size(16).create().unwrap());
         b.iter(|| {
             let pool = pool.clone();
             async_std::task::block_on(async {

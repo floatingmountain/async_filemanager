@@ -8,7 +8,7 @@ use std::{
     },
     task::Poll,
 };
-use threadpool::ThreadPool;
+use futures::executor::ThreadPool;
 
 pub struct Texture {}
 
@@ -65,7 +65,7 @@ impl Future for AsyncGpuLoader {
                 let imgdata = self.imgdata.clone();
                 let device = self.device.clone();
                 let queue = self.queue.clone();
-                self.pool.execute(move || {
+                self.pool.spawn_ok(async move {
                     tx.send((path.clone(), imgdata.upload(device, queue)))
                         .expect("Error forwarding loaded data!");
                     w.wake();
@@ -85,10 +85,11 @@ mod tests {
     use super::{AsyncGpuLoader, Device, ImageData, Queue};
     use crate::{AsyncFileManager, LoadStatus};
     use std::{path::PathBuf, sync::Arc};
+    use futures::executor::ThreadPoolBuilder;
 
     #[test]
     fn single_image_load_and_gpu_upload() {
-        let pool = Arc::new(threadpool::ThreadPool::new(4));
+        let pool = Arc::new(ThreadPoolBuilder::new().pool_size(4).create().unwrap());
         let mut mngr = AsyncFileManager::<ImageData>::new(pool.clone());
         futures::executor::block_on(async {
             let path = PathBuf::new().join("small_scream.png");
