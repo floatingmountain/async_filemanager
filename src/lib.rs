@@ -1,26 +1,32 @@
 mod fileloader;
 mod filemanager;
-mod gpuloader;
-mod gpumanager;
-mod imagedata;
+//mod gpuloader;
+//mod gpumanager;
+//mod imagedata;
 
-pub use fileloader::AsyncFileLoader;
-pub use filemanager::AsyncFileManager;
-use std::path::PathBuf;
+pub use fileloader::FileLoadFuture;
+//pub use filemanager::AsyncFileManager;
+use futures::future::Shared;
+use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 ///
-#[derive(Debug)]
-pub enum LoadStatus {
+pub enum LoadStatus<T>
+where
+    T: TryFrom<(PathBuf, Vec<u8>)> + Unpin,
+{
     NotLoading,
-    Loading,
-    Loaded,
-    Error(std::io::Error)
+    Loading(Shared<FileLoadFuture<T>>),
+    Loaded(Arc<T>),
+    Error(Arc<std::io::Error>),
 }
-impl PartialEq for LoadStatus {
+impl<T> PartialEq for LoadStatus<T>
+where
+    T: TryFrom<(PathBuf, Vec<u8>)> + Unpin,
+{
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (LoadStatus::NotLoading, LoadStatus::NotLoading) => true,
-            (LoadStatus::Loading, LoadStatus::Loading) => true,
-            (LoadStatus::Loaded, LoadStatus::Loaded) => true,
+            (LoadStatus::Loading(_l1), LoadStatus::Loading(_l2)) => true,
+            (LoadStatus::Loaded(_t1), LoadStatus::Loaded(_t2)) => true,
             (LoadStatus::Error(e1), LoadStatus::Error(e2)) => e1.kind().eq(&e2.kind()),
             _ => false,
         }

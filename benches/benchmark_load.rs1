@@ -1,4 +1,4 @@
-use async_filemanager::AsyncFileLoader;
+use async_filemanager::FileLoadFuture;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use futures::stream::futures_unordered::FuturesUnordered;
@@ -12,7 +12,7 @@ async fn load_custom(f: &[&str], pool: Arc<ThreadPool>) {
         let pool = pool.clone();
         let mut path = String::from("benches/benchfiles/");
         path.push_str(file);
-        let l = AsyncFileLoader::new(path, pool);
+        let l = FileLoadFuture::new(path, pool);
         u.push(l);
     }
     let mut vec = Vec::new();

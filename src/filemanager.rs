@@ -1,95 +1,65 @@
-use crate::{AsyncFileLoader, LoadStatus};
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use crate::{FileLoadFuture, LoadStatus};
+use futures::executor::ThreadPool;
+use futures::{future::Shared, FutureExt};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     convert::TryFrom,
     path::{Path, PathBuf},
     sync::Arc,
     task::Poll,
 };
-use futures::executor::ThreadPool;
 
 #[allow(unused)]
-pub struct AsyncFileManager<F>
+pub struct AsyncFileManager<T>
 where
-    F: TryFrom<(PathBuf, Vec<u8>)>,
+    T: TryFrom<(PathBuf, Vec<u8>)> + Unpin,
 {
     pool: Arc<ThreadPool>,
-    loading: FuturesUnordered<AsyncFileLoader>,
-    paths_loading: HashSet<PathBuf>,
-    load_errors: HashMap<PathBuf, std::io::Error>,
-    cache: HashMap<PathBuf, Arc<F>>,
+    loading: HashMap<PathBuf, Shared<FileLoadFuture<T>>>,
+    cache: HashMap<PathBuf, Arc<T>>,
 }
 
-impl<F> AsyncFileManager<F>
+impl<T> AsyncFileManager<T>
 where
-    F: TryFrom<(PathBuf, Vec<u8>)>,
+    T: TryFrom<(PathBuf, Vec<u8>)> + Unpin,
 {
     #[allow(unused)]
     pub fn new(pool: Arc<ThreadPool>) -> Self {
         Self {
             pool,
-            loading: futures::stream::FuturesUnordered::new(),
-            paths_loading: HashSet::new(),
-            load_errors: HashMap::new(),
+            loading: HashMap::new(),
             cache: HashMap::new(),
         }
     }
     #[allow(unused)]
     pub async fn load<P: AsRef<Path>>(&mut self, path: P) {
-        if !self.cache.contains_key(path.as_ref()) {
-            self.loading.push(AsyncFileLoader::new(
-                path.as_ref().to_owned(),
-                self.pool.clone(),
-            ));
-            self.paths_loading.insert(path.as_ref().to_owned());
-        }
-        self.update().await;
-    }
-    #[allow(unused)]
-    pub async fn get<P: AsRef<Path>>(&mut self, path: P) -> Option<&Arc<F>> {
-        self.update().await;
-        self.cache.get(path.as_ref())
-    }
-    #[allow(unused)]
-    pub async fn remove<P: AsRef<Path>>(&mut self, path: P) -> Option<Arc<F>> {
-        self.update().await;
-        self.cache.remove(path.as_ref())
-    }
-    #[allow(unused)]
-    pub async fn status<P: AsRef<Path>>(&mut self, path: P) -> LoadStatus {
-        self.update().await;
-        if self.paths_loading.contains(path.as_ref()) {
-            LoadStatus::Loading
-        } else if let Some(error) = self.load_errors.remove(path.as_ref()){
-            LoadStatus::Error(error)
-        } else {
-            if let Some(_) = self.cache.get(path.as_ref()) {
-                LoadStatus::Loaded
-            } else {
-                LoadStatus::NotLoading
-            }
+        if !self.cache.contains_key(path.as_ref()) && !self.loading.contains_key(path.as_ref()) {
+            let mut f = FileLoadFuture::new(path.as_ref().to_owned(), self.pool.clone()).shared();
+            futures::poll!(&mut f);
+            self.loading.insert(path.as_ref().to_owned(), f.clone());
         }
     }
-    async fn update(&mut self) {
-        while let Poll::Ready(Some((p, r))) = futures::poll!(self.loading.next()) {
-            self.paths_loading.remove(&p);
-            match r {
-                Ok(b) => {
-                    match F::try_from((p.clone(), b)) {
-                        Ok(f) => {
-                            self.cache.entry(p.clone()).or_insert(Arc::new(f));
-                        }
-                        Err(_e) => {  // TODO: log this
-                            self.load_errors.entry(p).or_insert(std::io::Error::new(std::io::ErrorKind::InvalidData, "Could not convert raw Data!"));
-                        }
+    #[allow(unused)]
+    pub async fn get<P: AsRef<Path>>(&mut self, path: P) -> LoadStatus<T> {
+        if let Some(f) = self.loading.get_mut(path.as_ref()) {
+            if let Poll::Ready(result) = futures::poll!(f) {
+                self.loading.remove(path.as_ref());
+                match result {
+                    Ok(t) => {
+                        self.cache
+                            .entry(path.as_ref().to_owned())
+                            .or_insert(t.clone());
+                        LoadStatus::Loaded(t)
                     }
+                    Err(e) => LoadStatus::Error(e),
                 }
-                Err(e) => {
-                    self.load_errors.entry(p).or_insert(e);
-                }
+            } else {
+                LoadStatus::Loading(self.loading.get(path.as_ref()).unwrap().clone())
             }
+        } else if let Some(f) = self.cache.get(path.as_ref()) {
+            LoadStatus::Loaded(f.clone())
+        } else {
+            LoadStatus::NotLoading
         }
     }
 }
@@ -97,8 +67,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::AsyncFileManager;
-    use std::{path::PathBuf, sync::Arc, convert::TryFrom};
+    use crate::LoadStatus;
     use futures::executor::ThreadPoolBuilder;
+    use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 
     #[derive(Debug, Eq, PartialEq)]
     struct LoadedFile {
@@ -111,17 +82,31 @@ mod tests {
             Ok(LoadedFile {
                 string: String::from_utf8(bytes)?,
             })
-    }
+        }
     }
     #[test]
-    fn it_works_2() {
+    fn manager() {
         let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
         let path = PathBuf::new().join("benches/benchfiles/s01");
 
         let mut manager = AsyncFileManager::<LoadedFile>::new(pool);
-        futures::executor::block_on(manager.load(&path));
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let t = futures::executor::block_on(manager.get(&path));
-        assert_eq!(t, Some(&Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap())));
+        futures::executor::block_on(async {
+            manager.load(&path).await;
+            match manager.get(&path).await {
+                LoadStatus::Loading(f) => println!("{:?}", f.await),
+                LoadStatus::Loaded(f) => println!("{:?}", f),
+                _ => panic!(),
+            }
+            if let LoadStatus::Loaded(file) = manager.get(&path).await {
+                println!("{:?}", file)
+            }
+            manager.load(&path).await;
+
+            match manager.get(&path).await {
+                LoadStatus::Loaded(f) => println!("{:?}", f),
+                _ => panic!(),
+            }
+        });
+        //assert_eq!(t, Some(&Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap())));
     }
 }
