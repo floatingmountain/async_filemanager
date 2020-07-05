@@ -34,9 +34,9 @@ where
     #[allow(unused)]
     pub async fn load<P: AsRef<Path>>(&mut self, path: P) {
         if !self.cache.contains_key(path.as_ref()) && !self.loading.contains_key(path.as_ref()) {
-            let mut f = FileLoadFuture::new(path.as_ref().to_owned(), self.pool.clone()).shared();
+            let mut f = FileLoadFuture::new(path.as_ref(), self.pool.clone()).shared();
             futures::poll!(&mut f);
-            self.loading.insert(path.as_ref().to_owned(), f.clone());
+            self.loading.insert(path.as_ref().to_owned(), f);
         }
     }
     #[allow(unused)]

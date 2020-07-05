@@ -5,9 +5,10 @@ mod filemanager;
 //mod imagedata;
 
 pub use fileloader::FileLoadFuture;
-//pub use filemanager::AsyncFileManager;
+pub use filemanager::AsyncFileManager;
 use futures::future::Shared;
 use std::{convert::TryFrom, path::PathBuf, sync::Arc};
+
 ///
 pub enum LoadStatus<T>
 where
@@ -18,6 +19,7 @@ where
     Loaded(Arc<T>),
     Error(Arc<std::io::Error>),
 }
+
 impl<T> PartialEq for LoadStatus<T>
 where
     T: TryFrom<(PathBuf, Vec<u8>)> + Unpin,
