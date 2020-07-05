@@ -50,7 +50,7 @@ where
                             .entry(path.as_ref().to_owned())
                             .or_insert(t.clone());
                         LoadStatus::Loaded(t)
-                    }
+                    },
                     Err(e) => LoadStatus::Error(e),
                 }
             } else {
@@ -93,20 +93,20 @@ mod tests {
         futures::executor::block_on(async {
             manager.load(&path).await;
             match manager.get(&path).await {
-                LoadStatus::Loading(f) => println!("{:?}", f.await),
-                LoadStatus::Loaded(f) => println!("{:?}", f),
+                LoadStatus::Loading(f) => assert_eq!(f.await.unwrap(), Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap())),
+                LoadStatus::Loaded(f) => assert_eq!(f, Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap())),
+
                 _ => panic!(),
             }
-            if let LoadStatus::Loaded(file) = manager.get(&path).await {
-                println!("{:?}", file)
+            if let LoadStatus::Loaded(f) = manager.get(&path).await {
+                assert_eq!(f, Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap()));
             }
             manager.load(&path).await;
 
             match manager.get(&path).await {
-                LoadStatus::Loaded(f) => println!("{:?}", f),
+                LoadStatus::Loaded(f) => assert_eq!(f, Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap())),
                 _ => panic!(),
             }
         });
-        //assert_eq!(t, Some(&Arc::new(LoadedFile::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap())));
     }
 }
