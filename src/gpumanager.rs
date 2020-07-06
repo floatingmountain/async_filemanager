@@ -1,15 +1,13 @@
 use crate::{
-    gpuloader::{Device, GpuLoadFuture, Queue, Texture},
+    gpuloader::{GpuLoadFuture, },
     imagedata::ImageData,
-     Identifier, LoadStatus,
+    Identifier, LoadStatus,
 };
+
 use futures::executor::ThreadPool;
 use futures::{future::Shared, FutureExt};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    task::Poll,
-};
+use std::{collections::HashMap, sync::Arc, task::Poll};
+use wgpu::{Device, Queue ,Texture};
 
 #[allow(unused)]
 pub struct AsyncGpuManager {
@@ -70,42 +68,67 @@ impl AsyncGpuManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{ AsyncGpuManager};
-    use crate::{
-        gpuloader::{Device, Queue},
-        imagedata::ImageData,
-        LoadStatus, AsyncFileManager,
-    };
+    use super::AsyncGpuManager;
+    use crate::{imagedata::ImageData, AsyncFileManager, LoadStatus};
     use futures::executor::ThreadPoolBuilder;
     use futures::FutureExt;
     use std::{path::PathBuf, sync::Arc};
     #[test]
     fn manager() {
-        let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
-        let path = PathBuf::new().join("small_scream.png");
-        let id = path.clone().into();
-        let mut imgmngr = AsyncFileManager::<ImageData>::new(pool.clone());
+        async_std::task::block_on(async {
+            let (needed_features, unsafe_features) =
+                (wgpu::Features::empty(), wgpu::UnsafeFeatures::disallow());
 
-        let device = Arc::new(Device {});
-        let queue = Arc::new(Queue {});
-        let mut gpumngr = AsyncGpuManager::new(pool, device, queue);
+            let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+            let adapter = instance
+                .request_adapter(
+                    &wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::Default,
+                        compatible_surface: None,
+                    },
+                    unsafe_features,
+                )
+                .await
+                .unwrap();
 
-        futures::executor::block_on(async {
+            let adapter_features = adapter.features();
+            let (device, queue) = adapter
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        features: adapter_features & needed_features,
+                        limits: wgpu::Limits::default(),
+                        shader_validation: true,
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+            let arc_device = Arc::new(device);
+            let arc_queue = Arc::new(queue);
+
+            let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
+            let path = PathBuf::new().join("small_scream.png");
+            let id = path.clone().into();
+            let mut imgmngr = AsyncFileManager::<ImageData>::new(pool.clone());
+
+            let mut gpumngr = AsyncGpuManager::new(pool, arc_device, arc_queue);
+
             imgmngr.load(&path).await;
-
             match imgmngr.get(&path).await {
                 LoadStatus::Loading(img_future) => {
-                    img_future.then(|img| async { gpumngr.load(&id, img.unwrap()).await }).await
+                    img_future
+                        .then(|img| async { gpumngr.load(&id, img.unwrap()).await })
+                        .await
                 }
                 LoadStatus::Loaded(img) => gpumngr.load(&id, img).await,
                 _ => panic!(),
             };
-            let texture = match gpumngr.get(&id).await {
+            let _texture = match gpumngr.get(&id).await {
                 LoadStatus::Loading(fut) => fut.await.unwrap(),
                 LoadStatus::Loaded(tex) => tex,
                 _ => panic!(),
             };
-            println!("{:?}",texture)
+            
         });
     }
 }

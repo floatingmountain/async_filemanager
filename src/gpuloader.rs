@@ -2,15 +2,9 @@ use super::imagedata::ImageData;
 use crossbeam_channel::{bounded, Receiver, TryRecvError};
 use futures::Future;
 use futures::{executor::ThreadPool, task::AtomicWaker};
-use std::{ sync::Arc, task::Poll};
-#[derive(Debug)]
-pub struct Texture {}
+use std::{sync::Arc, task::Poll};
 
-#[allow(unused)]
-pub struct Device;
-
-#[allow(unused)]
-pub struct Queue;
+use wgpu::{Device, Queue, Texture};
 
 pub struct GpuLoadFuture {
     imgdata: Arc<ImageData>,
@@ -83,16 +77,47 @@ impl Future for GpuLoadFuture {
 
 #[cfg(test)]
 mod tests {
-    use super::{Device, GpuLoadFuture, ImageData, Queue};
+    use super::{GpuLoadFuture, ImageData};
     use crate::{AsyncFileManager, LoadStatus};
     use futures::executor::ThreadPoolBuilder;
     use std::{path::PathBuf, sync::Arc};
 
     #[test]
     fn single_image_load_and_gpu_upload() {
-        let pool = Arc::new(ThreadPoolBuilder::new().pool_size(4).create().unwrap());
-        let mut mngr = AsyncFileManager::<ImageData>::new(pool.clone());
-        futures::executor::block_on(async {
+        async_std::task::block_on(async {
+            let (needed_features, unsafe_features) =
+                (wgpu::Features::empty(), wgpu::UnsafeFeatures::disallow());
+
+            let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+            let adapter = instance
+                .request_adapter(
+                    &wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::Default,
+                        compatible_surface: None,
+                    },
+                    unsafe_features,
+                )
+                .await
+                .unwrap();
+
+            let adapter_features = adapter.features();
+            let (device, queue) = adapter
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        features: adapter_features & needed_features,
+                        limits: wgpu::Limits::default(),
+                        shader_validation: true,
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+            let arc_device = Arc::new(device);
+            let arc_queue = Arc::new(queue);
+
+            let pool = Arc::new(ThreadPoolBuilder::new().pool_size(4).create().unwrap());
+            let mut mngr = AsyncFileManager::<ImageData>::new(pool.clone());
+
             let path = PathBuf::new().join("small_scream.png");
             mngr.load(&path).await;
             let img = match mngr.get(&path).await {
@@ -101,11 +126,9 @@ mod tests {
                 _ => panic!(),
             };
 
-            let device = Arc::new(Device {});
-            let queue = Arc::new(Queue {});
-            let gpufut = GpuLoadFuture::new(img, device, queue, pool);
-            let tex = gpufut.await.unwrap();
-            println!("{:?}", tex);
+            let gpufut = GpuLoadFuture::new(img, arc_device, arc_queue, pool);
+            let _tex = gpufut.await.unwrap();
+            
         });
     }
 }

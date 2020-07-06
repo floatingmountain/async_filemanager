@@ -6,14 +6,14 @@ mod imagedata;
 
 pub use fileloader::FileLoadFuture;
 pub use filemanager::AsyncFileManager;
-use futures::future::Shared;
-use std::{ io::Error, path::PathBuf, sync::Arc};
+use futures::{future::Shared, Future};
+use std::{io::Error, path::PathBuf, sync::Arc};
 
 ///
 pub enum LoadStatus<T, F>
 where
     T: Unpin,
-    F: futures::Future<Output = Result<Arc<T>, Arc<Error>>>,
+    F: Future<Output = Result<Arc<T>, Arc<Error>>>,
 {
     NotLoading,
     Loading(Shared<F>),
@@ -24,7 +24,7 @@ where
 impl<T, F> PartialEq for LoadStatus<T, F>
 where
     T: Unpin,
-    F: futures::Future<Output = Result<Arc<T>, Arc<Error>>>,
+    F: Future<Output = Result<Arc<T>, Arc<Error>>>,
 {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
