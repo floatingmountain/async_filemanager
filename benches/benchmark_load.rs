@@ -1,10 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
+use futures::executor::ThreadPoolBuilder;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt;
 use futures::FutureExt;
 use std::sync::Arc;
-use futures::executor::{  ThreadPoolBuilder};
 
 use async_filemanager::AsyncFileManager;
 use async_filemanager::LoadStatus;
@@ -29,7 +29,7 @@ async fn load_custom(f: &[&str], manager: &mut AsyncFileManager<LoadedFile>) {
         let mut path = String::from("benches/benchfiles/");
         path.push_str(file);
         manager.load(&path).await;
-        match manager.get(&path).await{
+        match manager.get(&path).await {
             LoadStatus::Loading(f) => fut.push(f),
             LoadStatus::Loaded(f) => l.push(f),
             _ => panic!(),
@@ -37,7 +37,7 @@ async fn load_custom(f: &[&str], manager: &mut AsyncFileManager<LoadedFile>) {
     }
 
     let mut vec = Vec::new();
-    while let Some(val) = fut.next().await{
+    while let Some(val) = fut.next().await {
         vec.push(val.unwrap());
     }
     black_box(vec);
@@ -48,22 +48,24 @@ async fn load_async(f: &[&str]) {
     for file in f.iter() {
         let mut path = PathBuf::from("benches/benchfiles/");
         path.push(file);
-        let l = async_std::fs::read(path.clone()).map(|f| (path,f.unwrap())).shared();
+        let l = async_std::fs::read(path.clone())
+            .map(|f| (path, f.unwrap()))
+            .shared();
         u.push(l);
     }
     let mut vec = Vec::new();
-    while let Some((p,v)) = u.next().await {
-        vec.push(LoadedFile::try_from((p,v)).unwrap());
+    while let Some((p, v)) = u.next().await {
+        vec.push(LoadedFile::try_from((p, v)).unwrap());
     }
     black_box(vec);
 }
-fn load_sync(f: &[&str]){
+fn load_sync(f: &[&str]) {
     let mut vec = Vec::new();
     for file in f.iter() {
         let mut path = PathBuf::from("benches/benchfiles/");
         path.push(file);
         let l = std::fs::read(path.clone()).unwrap();
-        vec.push(LoadedFile::try_from((path,l)).unwrap());
+        vec.push(LoadedFile::try_from((path, l)).unwrap());
     }
     black_box(vec);
 }

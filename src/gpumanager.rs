@@ -1,26 +1,23 @@
 use crate::{
-    gpuloader::{AsyncGpuLoader, Device, Queue, Texture},
+    gpuloader::{Device, GpuLoadFuture, Queue, Texture},
     imagedata::ImageData,
-    LoadStatus,
+     Identifier, LoadStatus,
 };
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use futures::executor::ThreadPool;
+use futures::{future::Shared, FutureExt};
 use std::{
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    collections::HashMap,
     sync::Arc,
     task::Poll,
 };
-use futures::executor::ThreadPool;
 
 #[allow(unused)]
 pub struct AsyncGpuManager {
     device: Arc<Device>,
     queue: Arc<Queue>,
     pool: Arc<ThreadPool>,
-    loading: FuturesUnordered<AsyncGpuLoader>,
-    paths_loading: HashSet<PathBuf>,
-    cache: HashMap<PathBuf, Arc<Texture>>,
+    loading: HashMap<Identifier, Shared<GpuLoadFuture>>,
+    cache: HashMap<Identifier, Arc<Texture>>,
 }
 
 impl AsyncGpuManager {
@@ -30,83 +27,63 @@ impl AsyncGpuManager {
             device,
             queue,
             pool,
-            loading: futures::stream::FuturesUnordered::new(),
-            paths_loading: HashSet::new(),
+            loading: HashMap::new(),
             cache: HashMap::new(),
         }
     }
     #[allow(unused)]
-    pub async fn load<P: AsRef<Path>>(&mut self, path: P, image_data: Arc<ImageData>) {
-        if !self.cache.contains_key(path.as_ref()) {
-            self.loading.push(AsyncGpuLoader::new(
-                path.as_ref().to_owned(),
-                image_data,
+    pub async fn load(&mut self, id: &Identifier, img: Arc<ImageData>) {
+        if !self.cache.contains_key(&id) && !self.loading.contains_key(&id) {
+            let mut f = GpuLoadFuture::new(
+                img,
                 self.device.clone(),
                 self.queue.clone(),
                 self.pool.clone(),
-            ));
-            self.paths_loading.insert(path.as_ref().to_owned());
+            )
+            .shared();
+            futures::poll!(&mut f);
+            self.loading.insert(id.clone(), f);
         }
-        self.update().await;
     }
     #[allow(unused)]
-    pub async fn get<P: AsRef<Path>>(&mut self, path: P) -> Option<&Arc<Texture>> {
-        self.update().await;
-        self.cache.get(path.as_ref())
-    }
-    #[allow(unused)]
-    pub async fn remove<P: AsRef<Path>>(&mut self, path: P) -> Option<Arc<Texture>> {
-        self.update().await;
-        self.cache.remove(path.as_ref())
-    }
-    #[allow(unused)]
-    pub async fn status<P: AsRef<Path>>(&mut self, path: P) -> LoadStatus {
-        self.update().await;
-        if self.paths_loading.contains(path.as_ref()) {
-            LoadStatus::Loading
-        } else {
-            if let Some(_) = self.cache.get(path.as_ref()) {
-                LoadStatus::Loaded
+    pub async fn get(&mut self, id: &Identifier) -> LoadStatus<Texture, GpuLoadFuture> {
+        if let Some(f) = self.loading.get_mut(id) {
+            if let Poll::Ready(result) = futures::poll!(f) {
+                self.loading.remove(id);
+                match result {
+                    Ok(t) => {
+                        self.cache.entry(id.clone()).or_insert(t.clone());
+                        LoadStatus::Loaded(t)
+                    }
+                    Err(e) => LoadStatus::Error(e),
+                }
             } else {
-                LoadStatus::NotLoading
+                LoadStatus::Loading(self.loading.get(id).unwrap().clone())
             }
-        }
-    }
-    async fn update(&mut self) {
-        while let Poll::Ready(Some((p, t))) = futures::poll!(self.loading.next()) {
-            self.paths_loading.remove(&p);
-            self.cache.entry(p.clone()).or_insert(Arc::new(t));
+        } else if let Some(f) = self.cache.get(id) {
+            LoadStatus::Loaded(f.clone())
+        } else {
+            LoadStatus::NotLoading
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-
-    use super::AsyncGpuManager;
+    use super::{ AsyncGpuManager};
     use crate::{
         gpuloader::{Device, Queue},
         imagedata::ImageData,
-        AsyncFileManager, LoadStatus,
+        LoadStatus, AsyncFileManager,
     };
-    use std::{path::PathBuf, sync::Arc};
     use futures::executor::ThreadPoolBuilder;
-
-    #[derive(Debug, Eq, PartialEq)]
-    struct LoadedFile {
-        string: String,
-    }
-
-    impl From<(PathBuf, Vec<u8>)> for LoadedFile {
-        fn from((_p, v): (PathBuf, Vec<u8>)) -> Self {
-            LoadedFile {
-                string: String::from_utf8(v).unwrap(),
-            }
-        }
-    }
+    use futures::FutureExt;
+    use std::{path::PathBuf, sync::Arc};
     #[test]
-    fn manage_gpu_upload() {
+    fn manager() {
         let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
+        let path = PathBuf::new().join("small_scream.png");
+        let id = path.clone().into();
         let mut imgmngr = AsyncFileManager::<ImageData>::new(pool.clone());
 
         let device = Arc::new(Device {});
@@ -114,17 +91,21 @@ mod tests {
         let mut gpumngr = AsyncGpuManager::new(pool, device, queue);
 
         futures::executor::block_on(async {
-            let path = PathBuf::new().join("small_scream.png");
             imgmngr.load(&path).await;
-            while imgmngr.status(&path).await.eq(&LoadStatus::Loading) {}
-            let img = imgmngr.get(&path).await.expect("Image not loaded!").clone();
-            gpumngr.load(&path, img).await;
-            while gpumngr.status(&path).await.eq(&LoadStatus::Loading) {}
-            let _txt = gpumngr
-                .get(&path)
-                .await
-                .expect("Texture not loaded!")
-                .clone();
+
+            match imgmngr.get(&path).await {
+                LoadStatus::Loading(img_future) => {
+                    img_future.then(|img| async { gpumngr.load(&id, img.unwrap()).await }).await
+                }
+                LoadStatus::Loaded(img) => gpumngr.load(&id, img).await,
+                _ => panic!(),
+            };
+            let texture = match gpumngr.get(&id).await {
+                LoadStatus::Loading(fut) => fut.await.unwrap(),
+                LoadStatus::Loaded(tex) => tex,
+                _ => panic!(),
+            };
+            println!("{:?}",texture)
         });
     }
 }

@@ -40,7 +40,7 @@ where
         }
     }
     #[allow(unused)]
-    pub async fn get<P: AsRef<Path>>(&mut self, path: P) -> LoadStatus<T> {
+    pub async fn get<P: AsRef<Path>>(&mut self, path: P) -> LoadStatus<T, FileLoadFuture<T>> {
         if let Some(f) = self.loading.get_mut(path.as_ref()) {
             if let Poll::Ready(result) = futures::poll!(f) {
                 self.loading.remove(path.as_ref());
@@ -50,7 +50,7 @@ where
                             .entry(path.as_ref().to_owned())
                             .or_insert(t.clone());
                         LoadStatus::Loaded(t)
-                    },
+                    }
                     Err(e) => LoadStatus::Error(e),
                 }
             } else {

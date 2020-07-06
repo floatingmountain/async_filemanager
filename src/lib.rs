@@ -1,28 +1,30 @@
 mod fileloader;
 mod filemanager;
-//mod gpuloader;
-//mod gpumanager;
-//mod imagedata;
+mod gpuloader;
+mod gpumanager;
+mod imagedata;
 
 pub use fileloader::FileLoadFuture;
 pub use filemanager::AsyncFileManager;
 use futures::future::Shared;
-use std::{convert::TryFrom, path::PathBuf, sync::Arc};
+use std::{ io::Error, path::PathBuf, sync::Arc};
 
 ///
-pub enum LoadStatus<T>
+pub enum LoadStatus<T, F>
 where
-    T: TryFrom<(PathBuf, Vec<u8>)> + Unpin,
+    T: Unpin,
+    F: futures::Future<Output = Result<Arc<T>, Arc<Error>>>,
 {
     NotLoading,
-    Loading(Shared<FileLoadFuture<T>>),
+    Loading(Shared<F>),
     Loaded(Arc<T>),
     Error(Arc<std::io::Error>),
 }
 
-impl<T> PartialEq for LoadStatus<T>
+impl<T, F> PartialEq for LoadStatus<T, F>
 where
-    T: TryFrom<(PathBuf, Vec<u8>)> + Unpin,
+    T: Unpin,
+    F: futures::Future<Output = Result<Arc<T>, Arc<Error>>>,
 {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -35,11 +37,12 @@ where
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Clone)]
 pub enum Identifier {
     Path(PathBuf),
     Index(usize),
 }
+
 impl From<PathBuf> for Identifier {
     fn from(p: PathBuf) -> Self {
         Identifier::Path(p)
