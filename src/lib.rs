@@ -4,8 +4,7 @@ mod gpuloader;
 mod gpumanager;
 mod imagedata;
 
-mod material;
-mod matmanager;
+mod ronmanager;
 
 pub use fileloader::FileLoadFuture;
 pub use filemanager::AsyncFileManager;
