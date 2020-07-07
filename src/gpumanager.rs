@@ -1,13 +1,9 @@
-use crate::{
-    gpuloader::{GpuLoadFuture, },
-    imagedata::ImageData,
-    Identifier, LoadStatus,
-};
+use crate::{gpuloader::GpuLoadFuture, imagedata::ImageData, Identifier, LoadStatus};
 
 use futures::executor::ThreadPool;
 use futures::{future::Shared, FutureExt};
 use std::{collections::HashMap, sync::Arc, task::Poll};
-use wgpu::{Device, Queue ,Texture};
+use wgpu::{Device, Queue, Texture};
 
 #[allow(unused)]
 pub struct AsyncGpuManager {
@@ -128,7 +124,6 @@ mod tests {
                 LoadStatus::Loaded(tex) => tex,
                 _ => panic!(),
             };
-            
         });
     }
 }

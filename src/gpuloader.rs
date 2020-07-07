@@ -128,7 +128,6 @@ mod tests {
 
             let gpufut = GpuLoadFuture::new(img, arc_device, arc_queue, pool);
             let _tex = gpufut.await.unwrap();
-            
         });
     }
 }

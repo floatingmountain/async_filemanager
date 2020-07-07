@@ -109,8 +109,7 @@ mod tests {
         let path = PathBuf::new().join("benches/benchfiles/s01");
         let l = FileLoadFuture::<LoadedFile>::new(&path, pool);
         async_std::task::block_on(async {
-            let f = l.await.unwrap();
-            println!("{:?}", f);
+            let _f = l.await.unwrap();
         })
     }
 }

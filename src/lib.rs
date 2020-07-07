@@ -4,6 +4,9 @@ mod gpuloader;
 mod gpumanager;
 mod imagedata;
 
+mod material;
+mod matmanager;
+
 pub use fileloader::FileLoadFuture;
 pub use filemanager::AsyncFileManager;
 use futures::{future::Shared, Future};

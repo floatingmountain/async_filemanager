@@ -1,12 +1,12 @@
+use image::ImageFormat;
 use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 use wgpu::{Device, Queue, Texture};
-use image::ImageFormat;
 
 fn convert_format(i: ImageFormat) -> wgpu::TextureFormat {
-    match i{
-            ImageFormat::Hdr => wgpu::TextureFormat::Rgba32Float,
-            ImageFormat::Png => wgpu::TextureFormat::Rgba8Unorm,
-        _=> panic!()
+    match i {
+        ImageFormat::Hdr => wgpu::TextureFormat::Rgba32Float,
+        ImageFormat::Png => wgpu::TextureFormat::Rgba8Unorm,
+        _ => panic!(),
     }
 }
 
@@ -21,8 +21,6 @@ pub struct ImageData {
 impl ImageData {
     pub fn upload(&self, device: Arc<Device>, queue: Arc<Queue>) -> Texture {
         let format = convert_format(self.format);
-        
-        println!("{:?}",self.name);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             size: self.extent,
             mip_level_count: 1,
@@ -53,18 +51,22 @@ impl ImageData {
 impl TryFrom<(PathBuf, Vec<u8>)> for ImageData {
     fn try_from((p, raw): (PathBuf, Vec<u8>)) -> Result<Self, std::io::Error> {
         if let Some(format) = get_format_from_extension(&p) {
-            let image = image::load_from_memory_with_format(&raw, format).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+            let image = image::load_from_memory_with_format(&raw, format)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
             let image = image.to_rgba();
             let (width, height) = image.dimensions();
-            Ok(ImageData{
-                name: p.file_stem().and_then(|name|name.to_str()).and_then(|name|Some(String::from(name))),
-                extent: wgpu::Extent3d{
+            Ok(ImageData {
+                name: p
+                    .file_stem()
+                    .and_then(|name| name.to_str())
+                    .and_then(|name| Some(String::from(name))),
+                extent: wgpu::Extent3d {
                     width,
                     height,
                     depth: 1,
                 },
                 raw: image.into_raw(),
-                format,  
+                format,
             })
         } else {
             todo!() // TODO: Maybe guess format from raw?
@@ -95,13 +97,11 @@ mod tests {
             let path = PathBuf::new().join("small_scream.png");
             manager.load(&path).await;
 
-            let file = match manager.get(&path).await {
+            let _ = match manager.get(&path).await {
                 LoadStatus::Loaded(f) => f,
                 LoadStatus::Loading(f) => f.await.unwrap(),
                 _ => panic!(),
             };
-            //println!("{:?}", file)
-            //assert_eq!(file, Arc::new(ImageData::try_from((PathBuf::new(),b"\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\n\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest\r\ntest\r\n\r\ntest\r\ntesttesttesttesttesttesttesttesttesttesttest".to_vec())).unwrap()));
         });
     }
 }
