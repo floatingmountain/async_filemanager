@@ -11,6 +11,7 @@ futures = { version = "0.3", features = ["default", "thread-pool"] }
 crossbeam-channel = "0.4"
 wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev ="0c7c3afebb12bf411d6964887b85e5fd152057f5"}
 image = "0.23"
+
 [dev-dependencies]
 criterion = "0.3"
 async-std = "1.6"
